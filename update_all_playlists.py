@@ -2,13 +2,13 @@
 # -*- coding: utf-8 -*-
 
 """
-Script untuk meng-update semua file .m3u / .m3u8
-di SEMUA repository GitHub milik user yang punya token.
+Script untuk meng-update SEMUA file di SEMUA repository
+GitHub milik user yang punya token.
 
-⚠️ CATATAN PENTING:
-- SCRIPT INI TIDAK PERNAH MENGUBAH NAMA REPO.
-- SCRIPT INI TIDAK PERNAH MENGUBAH NAMA FILE.
-  YANG DIGANTI HANYA ISI (CONTENT) FILE-NYA SAJA.
+⚠️ PENTING:
+- TIDAK mengubah nama repo.
+- TIDAK mengubah nama file.
+- HANYA mengubah ISI (content) setiap file yang ditemukan.
 
 Dipakai dari GitHub Actions dengan env:
   GITHUB_PAT = ${{ secrets.MAGELIFE_GH_PAT }}
@@ -31,7 +31,7 @@ DRY_RUN = False
 REPO_NAME_KEYWORDS = []  # biarkan [] kalau mau semua repo
 
 
-# Konten playlist baru yang akan MENIMPA isi file .m3u / .m3u8
+# Konten baru yang akan MENIMPA isi semua file
 PLAYLIST_CONTENT = """#EXTINF:-1 group-logo="https://i.imgur.com/aVBedkE.jpeg",🔰 MAGELIFE OFFICIAL
 
 #EXTINF:-1 tvg-id="Iheart80s" tvg-name="Iheart80s" tvg-logo="https://i.imgur.com/aVBedkE.jpeg" group-title="🔰 CHAT ADMIN", CHAT ADMIN
@@ -109,18 +109,22 @@ https://iheart-iheart80s-1-us.roku.wurl.tv/playlist.m3u8
 
 
 def should_process_repo(repo_name: str) -> bool:
+    """Kalau REPO_NAME_KEYWORDS kosong -> semua repo diproses."""
     if not REPO_NAME_KEYWORDS:
         return True
     lower = repo_name.lower()
     return any(keyword.lower() in lower for keyword in REPO_NAME_KEYWORDS)
 
 
-def is_playlist_file(path: str) -> bool:
-    """Pilih file yang akan di-update BERDASARKAN NAMANYA.
-    Fungsi ini TIDAK mengubah nama file, hanya memutuskan mau diupdate atau tidak.
+def should_update_file(path: str) -> bool:
     """
-    lower = path.lower()
-    return lower.endswith(".m3u") or lower.endswith(".m3u8")
+    Di versi ini: SEMUA file di-update (tanpa lihat ekstensi).
+    Kalau mau exclude tipe tertentu (misal README.md), bisa diatur di sini.
+    """
+    # contoh kalau mau skip README:
+    # if path.lower().endswith("readme.md"):
+    #     return False
+    return True
 
 
 def main():
@@ -178,19 +182,19 @@ def main():
 
             path = item.path
 
-            if not is_playlist_file(path):
+            if not should_update_file(path):
                 continue
 
             files_touched += 1
-            print(f"   - Target file (hanya isi yang diubah, nama file tetap): {path}")
+            print(f"   - Target file (nama TIDAK diubah, hanya isi): {path}")
 
             if DRY_RUN:
                 continue
 
             try:
                 repo.update_file(
-                    path,  # ⬅ NAMA FILE TETAP SAMA
-                    "Update playlist MAGELIFE footer via script",
+                    path,  # nama file tetap sama persis
+                    "Update semua file Magelife via script",
                     PLAYLIST_CONTENT,
                     item.sha,
                     branch=default_branch,
@@ -200,7 +204,7 @@ def main():
                 print(f"     ❌ Gagal update {path}: {e}")
 
         if files_touched == 0:
-            print("   (Tidak ada file .m3u / .m3u8 ditemukan di repo ini.)")
+            print("   (Tidak ada file yang di-update di repo ini.)")
 
     print("\nSelesai proses semua repo.")
 
