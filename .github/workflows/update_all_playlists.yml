@@ -29,7 +29,7 @@ jobs:
 
       - name: Run update_all_playlists.py
         env:
-          # Ambil PAT dari secret repo: MAGELIFE_GH_PAT
+          # PAT classic kamu disimpan sebagai secret ini
           GITHUB_PAT: ${{ secrets.MAGELIFE_GH_PAT }}
         run: |
           python update_all_playlists.py
