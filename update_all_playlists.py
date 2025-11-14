@@ -3,31 +3,27 @@
 
 """
 Script untuk meng-update semua file .m3u / .m3u8
-di SEMUA repository GitHub milik user tertentu.
+di SEMUA repository GitHub milik user yang punya token.
 
-- Target user : maywho5454
-- Auth        : Personal Access Token melalui env var GITHUB_PAT
-               (di-set lewat GitHub Actions secret MAGELIFE_GH_PAT)
+Dipakai dari GitHub Actions dengan env:
+  GITHUB_PAT = ${{ secrets.MAGELIFE_GH_PAT }}
 """
 
 import os
-from github import Github, GithubException
+from github import Github, GithubException, Auth
 
 # ==============================
 # KONFIGURASI
 # ==============================
 
-# Username GitHub yang mau diproses
-GITHUB_USERNAME = "maywho5454"
-
-# DRY_RUN = True  -> cuma simulasi (tidak ada file yang diubah)
+# DRY_RUN = True  -> hanya simulasi (cek file apa saja, TIDAK mengubah apa pun)
 # DRY_RUN = False -> beneran update file di GitHub
 DRY_RUN = False
 
-# Kalau kamu mau batasi hanya repo tertentu, isi keyword di sini.
+# Kalau mau batasi hanya repo tertentu, isi keyword di sini.
 # Contoh: ["CD", "OA"] -> hanya repo yang namanya mengandung "CD" atau "OA".
-# Kalau kosong [], akan memproses semua repo milik user.
-REPO_NAME_KEYWORDS = []  # biarkan kosong untuk semua repo
+# Kalau kosong [], semua repo milik user akan diproses.
+REPO_NAME_KEYWORDS = []  # biarkan [] kalau mau semua repo
 
 
 # Konten playlist baru yang akan MENIMPA isi file .m3u / .m3u8
@@ -126,10 +122,7 @@ def is_playlist_file(path: str) -> bool:
 
 def main():
     # Di workflow nanti kita set env GITHUB_PAT dari secret MAGELIFE_GH_PAT
-    token = os.getenv("GITHUB_PAT")
-    if not token:
-        # fallback ke GITHUB_TOKEN kalau mau dipakai lokal
-        token = os.getenv("GITHUB_TOKEN")
+    token = os.getenv("GITHUB_PAT") or os.getenv("GITHUB_TOKEN")
 
     if not token:
         raise SystemExit(
@@ -137,12 +130,14 @@ def main():
             "Kalau jalan di GitHub Actions, pastikan secret MAGELIFE_GH_PAT sudah di-set."
         )
 
-    gh = Github(token)
+    # Auth cara baru (hindari warning deprecated)
+    auth = Auth.Token(token)
+    gh = Github(auth=auth)
 
     try:
-        user = gh.get_user(GITHUB_USERNAME)
+        user = gh.get_user()  # user dari token, nggak perlu hardcode username
     except GithubException as e:
-        raise SystemExit(f"Gagal mengambil user {GITHUB_USERNAME}: {e}")
+        raise SystemExit(f"Gagal mengambil user dari token: {e}")
 
     print(f"Login sebagai: {user.login}")
     print(f"DRY_RUN              : {DRY_RUN}")
@@ -161,7 +156,6 @@ def main():
         default_branch = repo.default_branch or "main"
         print(f"   Default branch: {default_branch}")
 
-        # Ambil isi root repo
         try:
             contents = repo.get_contents("", ref=default_branch)
         except GithubException as e:
@@ -170,12 +164,11 @@ def main():
 
         files_touched = 0
 
-        # DFS manual untuk jalanin semua folder & file
+        # DFS manual
         while contents:
             item = contents.pop(0)
 
             if item.type == "dir":
-                # Tambahkan isi folder ke antrian
                 try:
                     contents.extend(
                         repo.get_contents(item.path, ref=default_branch)
@@ -193,7 +186,7 @@ def main():
             print(f"   - Target file: {path}")
 
             if DRY_RUN:
-                # Hanya simulasi: tidak mengupdate
+                # Hanya log, tidak mengupdate
                 continue
 
             try:
