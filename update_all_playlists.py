@@ -6,12 +6,8 @@ Script untuk meng-update semua file .m3u / .m3u8
 di SEMUA repository GitHub milik user tertentu.
 
 - Target user : maywho5454
-- Auth        : Personal Access Token melalui env var GITHUB_TOKEN
-
-Cara pakai singkat:
-1. pip install PyGithub
-2. export/set GITHUB_TOKEN=TOKEN_KAMU
-3. python update_all_playlists.py
+- Auth        : Personal Access Token melalui env var GITHUB_PAT
+               (di-set lewat GitHub Actions secret MAGELIFE_GH_PAT)
 """
 
 import os
@@ -111,10 +107,6 @@ https://iheart-iheart80s-1-us.roku.wurl.tv/playlist.m3u8
 """
 
 
-# ==============================
-# FUNGSI BANTUAN
-# ==============================
-
 def should_process_repo(repo_name: str) -> bool:
     """
     Cek apakah repo ini mau diproses, berdasarkan REPO_NAME_KEYWORDS.
@@ -132,10 +124,95 @@ def is_playlist_file(path: str) -> bool:
     return lower.endswith(".m3u") or lower.endswith(".m3u8")
 
 
-# ==============================
-# MAIN
-# ==============================
-
 def main():
-    token = os.getenv("GITHUB_TOKEN")
+    # Di workflow nanti kita set env GITHUB_PAT dari secret MAGELIFE_GH_PAT
+    token = os.getenv("GITHUB_PAT")
     if not token:
+        # fallback ke GITHUB_TOKEN kalau mau dipakai lokal
+        token = os.getenv("GITHUB_TOKEN")
+
+    if not token:
+        raise SystemExit(
+            "ERROR: Env GITHUB_PAT / GITHUB_TOKEN belum diset.\n"
+            "Kalau jalan di GitHub Actions, pastikan secret MAGELIFE_GH_PAT sudah di-set."
+        )
+
+    gh = Github(token)
+
+    try:
+        user = gh.get_user(GITHUB_USERNAME)
+    except GithubException as e:
+        raise SystemExit(f"Gagal mengambil user {GITHUB_USERNAME}: {e}")
+
+    print(f"Login sebagai: {user.login}")
+    print(f"DRY_RUN              : {DRY_RUN}")
+    if REPO_NAME_KEYWORDS:
+        print(f"Filter repo keywords : {REPO_NAME_KEYWORDS}")
+    else:
+        print("Filter repo keywords : (SEMUA repo user akan diproses)")
+    print("-" * 60)
+
+    # Loop semua repo milik user
+    for repo in user.get_repos():
+        if not should_process_repo(repo.name):
+            continue
+
+        print(f"\n▶ Repo: {repo.full_name}")
+        default_branch = repo.default_branch or "main"
+        print(f"   Default branch: {default_branch}")
+
+        # Ambil isi root repo
+        try:
+            contents = repo.get_contents("", ref=default_branch)
+        except GithubException as e:
+            print(f"   Gagal membaca isi repo: {e}")
+            continue
+
+        files_touched = 0
+
+        # DFS manual untuk jalanin semua folder & file
+        while contents:
+            item = contents.pop(0)
+
+            if item.type == "dir":
+                # Tambahkan isi folder ke antrian
+                try:
+                    contents.extend(
+                        repo.get_contents(item.path, ref=default_branch)
+                    )
+                except GithubException as e:
+                    print(f"   Gagal baca folder {item.path}: {e}")
+                continue
+
+            path = item.path
+
+            if not is_playlist_file(path):
+                continue
+
+            files_touched += 1
+            print(f"   - Target file: {path}")
+
+            if DRY_RUN:
+                # Hanya simulasi: tidak mengupdate
+                continue
+
+            try:
+                repo.update_file(
+                    path,
+                    "Update playlist MAGELIFE footer via script",
+                    PLAYLIST_CONTENT,
+                    item.sha,
+                    branch=default_branch,
+                )
+                print(f"     ✅ Berhasil update {path}")
+            except GithubException as e:
+                print(f"     ❌ Gagal update {path}: {e}")
+
+        if files_touched == 0:
+            print("   (Tidak ada file .m3u / .m3u8 ditemukan di repo ini.)")
+
+    print("\nSelesai proses semua repo.")
+
+
+if __name__ == "__main__":
+    main()
