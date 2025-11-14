@@ -5,6 +5,11 @@
 Script untuk meng-update semua file .m3u / .m3u8
 di SEMUA repository GitHub milik user yang punya token.
 
+⚠️ CATATAN PENTING:
+- SCRIPT INI TIDAK PERNAH MENGUBAH NAMA REPO.
+- SCRIPT INI TIDAK PERNAH MENGUBAH NAMA FILE.
+  YANG DIGANTI HANYA ISI (CONTENT) FILE-NYA SAJA.
+
 Dipakai dari GitHub Actions dengan env:
   GITHUB_PAT = ${{ secrets.MAGELIFE_GH_PAT }}
 """
@@ -104,10 +109,6 @@ https://iheart-iheart80s-1-us.roku.wurl.tv/playlist.m3u8
 
 
 def should_process_repo(repo_name: str) -> bool:
-    """
-    Cek apakah repo ini mau diproses, berdasarkan REPO_NAME_KEYWORDS.
-    Kalau REPO_NAME_KEYWORDS kosong -> semua repo diproses.
-    """
     if not REPO_NAME_KEYWORDS:
         return True
     lower = repo_name.lower()
@@ -115,13 +116,14 @@ def should_process_repo(repo_name: str) -> bool:
 
 
 def is_playlist_file(path: str) -> bool:
-    """True kalau path berakhiran .m3u atau .m3u8."""
+    """Pilih file yang akan di-update BERDASARKAN NAMANYA.
+    Fungsi ini TIDAK mengubah nama file, hanya memutuskan mau diupdate atau tidak.
+    """
     lower = path.lower()
     return lower.endswith(".m3u") or lower.endswith(".m3u8")
 
 
 def main():
-    # Di workflow nanti kita set env GITHUB_PAT dari secret MAGELIFE_GH_PAT
     token = os.getenv("GITHUB_PAT") or os.getenv("GITHUB_TOKEN")
 
     if not token:
@@ -130,12 +132,11 @@ def main():
             "Kalau jalan di GitHub Actions, pastikan secret MAGELIFE_GH_PAT sudah di-set."
         )
 
-    # Auth cara baru (hindari warning deprecated)
     auth = Auth.Token(token)
     gh = Github(auth=auth)
 
     try:
-        user = gh.get_user()  # user dari token, nggak perlu hardcode username
+        user = gh.get_user()
     except GithubException as e:
         raise SystemExit(f"Gagal mengambil user dari token: {e}")
 
@@ -147,7 +148,6 @@ def main():
         print("Filter repo keywords : (SEMUA repo user akan diproses)")
     print("-" * 60)
 
-    # Loop semua repo milik user
     for repo in user.get_repos():
         if not should_process_repo(repo.name):
             continue
@@ -164,7 +164,6 @@ def main():
 
         files_touched = 0
 
-        # DFS manual
         while contents:
             item = contents.pop(0)
 
@@ -183,15 +182,14 @@ def main():
                 continue
 
             files_touched += 1
-            print(f"   - Target file: {path}")
+            print(f"   - Target file (hanya isi yang diubah, nama file tetap): {path}")
 
             if DRY_RUN:
-                # Hanya log, tidak mengupdate
                 continue
 
             try:
                 repo.update_file(
-                    path,
+                    path,  # ⬅ NAMA FILE TETAP SAMA
                     "Update playlist MAGELIFE footer via script",
                     PLAYLIST_CONTENT,
                     item.sha,
